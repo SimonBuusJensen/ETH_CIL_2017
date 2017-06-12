@@ -1,10 +1,8 @@
 Tasks to do before June 4th:
 
-
-Read PixelCNN paper and variations
-Read on Generative Models
-Read data description for the project on Kaggle
-Learn to work with Git and Latex
-Try a simple model on a part of data to get an idea(Density, Volume and which models can or cannot be used)
-Look for other applications of such model(optional)
-
+- Read PixelCNN paper and variations
+- Read on Generative Models
+- Read data description for the project on Kaggle
+- Learn to work with Git and Latex
+- Try a simple model on a part of data to get an idea(Density, Volume and which models can or cannot be used).
+- Look for other applications of such model(optional)
