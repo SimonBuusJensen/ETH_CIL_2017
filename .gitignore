@@ -1,3 +1,7 @@
 twitter-datasets
 cosmology_aux_data_170429
 *.png
+DCGAN-tensorflow/checkpoint
+DCGAN-tensorflow/data
+DCGAN-tensorflow/samples
+DCGAN-tensorflow/logs
