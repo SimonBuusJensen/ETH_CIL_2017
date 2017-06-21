@@ -100,7 +100,9 @@ class DCGAN(object):
 
     self.build_model()
 
+
   def build_model(self):
+  
     if self.y_dim:
       self.y= tf.placeholder(tf.float32, [self.batch_size, self.y_dim], name='y')
 
@@ -149,7 +151,7 @@ class DCGAN(object):
   
     scaled_scores = self.scores / 8.0
     self.d_loss_real = tf.reduce_mean(
-      tf.pow(self.D - scaled_scores, 2))/(2 * self.batch_size)
+      tf.pow(self.D - scaled_scores, 2))
     self.d_loss_fake = tf.reduce_mean(
       sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))
     self.g_loss = tf.reduce_mean(
@@ -171,42 +173,6 @@ class DCGAN(object):
     self.saver = tf.train.Saver()
   
   
-#  def similarity(self, filename, score):
-#      
-#      self.data = glob(filename)
-#      imreadImg = imread(self.data[0]);
-#      if len(imreadImg.shape) >= 3: #check if image is a non-grayscale image by checking channel number
-#        self.c_dim = imread(self.data[0]).shape[-1]
-#      else:
-#        self.c_dim = 1
-#
-#    self.grayscale = (self.c_dim == 1)
-#    self.inputs = tf.placeholder(
-#        tf.float32, [self.batch_size] + image_dims, name='real_images')
-#        
-#    self.scores = score
-#    # add another layer to learn the similarity score
-#    # note: this layer must be trained when the discriminator is trained(?)
-#    D, D_logits = self.discriminator(input, y, reuse=False)
-#
-#    self.S = linear(self.D, 1, 's_lin') # not sure about the scope
-#    S_logits = linear(self.D, 1, 's_logits')
-#
-#    loss = squared_distance(S, score)
-#    # Optimizer with clip by norm
-#    tvars = tf.trainable_variables()
-#    grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), 10)
-#    optimizer = tf.train.AdamOptimizer(learning_rate=self._args.learning_rate) # Adam Optimizer
-#    self._optimizer = optimizer.apply_gradients(zip(grads, tvars))
-#
-#
-#    s_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
-#    .minimize(self.S, var_list=self.d_vars)
-#
-#    _, summary_str = self.sess.run([d_optim, self.d_sum],
-#                                   feed_dict={ self.inputs: batch_images, self.z: batch_z })
-#    self.writer.add_summary(summary_str, counter)
-
   def predict(self, config):
     df = pd.read_csv(os.path.join(self.data_path,"scored.csv"))
     self.all_scores = np.array(df.sort_values(by='Id')['Actual'])
@@ -214,14 +180,15 @@ class DCGAN(object):
 
     if not self.training_subset:
       print("provide prediction set")
-    
-    self.test_subset = min(training_subset + 50, len(all_scores))
+    # getting the test subset
+    self.test_subset = min(self.training_subset + 64, len(self.all_scores))
 
     self.all_scores = self.all_scores[self.training_subset:self.test_subset]
     self.data = self.data[self.training_subset:self.test_subset]
+    batch_scores = self.all_scores
 
     self.D, self.D_logits = \
-        self.discriminator(inputs, self.y, reuse=False)
+        self.discriminator(self.inputs, reuse=True)
 
     batch_files = self.data
     batch = [
@@ -232,10 +199,21 @@ class DCGAN(object):
                 resize_width=self.output_width,
                 crop=self.crop,
                 grayscale=self.grayscale) for batch_file in batch_files]
-#    batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
-#    _, summary_str = self.sess.run([d_optim, self.d_sum],
-#            feed_dict={ self.inputs: batch_images, self.z: batch_z, self.scores: batch_scores })
-#    self.writer.add_summary(summary_str, counter)
+    batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
+    
+    self.d_sum_predict = histogram_summary("d_predicted", self.D)
+    self.d_merge_sum_predict = merge_summary(
+        [self.d_loss_real_sum, self.d_loss_sum, self.d_sum_predict])
+
+    batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
+          .astype(np.float32)
+
+    summary_str, D = self.sess.run([self.d_merge_sum_predict, self.D],
+            feed_dict={ self.inputs: batch_images, self.z: batch_z, self.scores: batch_scores })
+    D *= 8
+    print(summary_str, D, batch_scores)
+    self.writer = SummaryWriter("./logs", self.sess.graph)
+    self.writer.add_summary(summary_str, 0) # TODO: counter??
 
   
   def train(self, config):
