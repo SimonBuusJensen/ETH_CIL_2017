@@ -208,9 +208,11 @@ class DCGAN(object):
     batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
           .astype(np.float32)
 
-    summary_str, D_similarity = self.sess.run([self.d_merge_sum_predict, self.D_similarity],
+    summary_str, D_similarity, D = self.sess.run([self.d_merge_sum_predict, self.D_similarity, self.D],
             feed_dict={ self.inputs: batch_images, self.z: batch_z, self.scores: batch_scores })
-    print(summary_str, D_similarity, batch_scores)
+    print("similarities predicted: ", D_similarity)
+    print("actual similarities: ", batch_scores)
+    print("D values:", D)
     self.writer = SummaryWriter("./logs", self.sess.graph)
     self.writer.add_summary(summary_str, 0) # TODO: counter??
 

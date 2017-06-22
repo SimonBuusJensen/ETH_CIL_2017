@@ -8,7 +8,7 @@ from utils import pp, visualize, to_json, show_all_variables
 import tensorflow as tf
 
 flags = tf.app.flags
-flags.DEFINE_integer("epoch", 25, "Epoch to train [25]")
+flags.DEFINE_integer("epoch", 10000, "Epoch to train [10000]")
 flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam [0.0002]")
 flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
 flags.DEFINE_integer("train_size", np.inf, "The size of train images [np.inf]")
@@ -22,6 +22,7 @@ flags.DEFINE_string("dataset", "scored", "The name of dataset [celebA, mnist, ls
 flags.DEFINE_string("input_fname_pattern", "*.png", "Glob pattern of filename of input images [*]")
 flags.DEFINE_string("checkpoint_dir", "checkpoint", "Directory name to save the checkpoints [checkpoint]")
 flags.DEFINE_string("sample_dir", "samples", "Directory name to save the image samples [samples]")
+flags.DEFINE_string("data_dir", "../../cosmology_aux_data_170429", "Directory name to look for input image datasets [../../cosmology_aux_data_170429]")
 flags.DEFINE_boolean("train", False, "True for training, False for testing [False]")
 flags.DEFINE_boolean("crop", False, "True for training, False for testing [False]")
 flags.DEFINE_boolean("visualize", False, "True for visualizing, False for nothing [False]")
@@ -74,7 +75,7 @@ def main(_):
           input_fname_pattern=FLAGS.input_fname_pattern,
           crop=FLAGS.crop,
           checkpoint_dir=FLAGS.checkpoint_dir,
-          sample_dir=FLAGS.sample_dir, data_path="../../cosmology_aux_data_170429", training_subset=FLAGS.training_subset)
+          sample_dir=FLAGS.sample_dir, data_path=FLAGS.data_dir, training_subset=FLAGS.training_subset)
 
     show_all_variables()
 
