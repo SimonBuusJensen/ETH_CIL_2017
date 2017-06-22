@@ -118,6 +118,7 @@ class DCGAN(object):
     self.scores = tf.placeholder(tf.float32, [self.batch_size], name='similarity_scores')
     
     inputs = self.inputs
+    scores = self.scores
     sample_inputs = self.sample_inputs
 
     self.z = tf.placeholder(
@@ -134,10 +135,10 @@ class DCGAN(object):
           self.discriminator(self.G, self.y, reuse=True)
     else:
       self.G = self.generator(self.z)
-      self.D, self.D_logits = self.discriminator(inputs)
+      self.D, self.D_logits, self.D_similarity = self.discriminator(inputs, scores)
 
       self.sampler = self.sampler(self.z)
-      self.D_, self.D_logits_ = self.discriminator(self.G, reuse=True)
+      self.D_, self.D_logits_, _ = self.discriminator(self.G, scores=tf.zeros_like(self.scores), reuse=True)
 
     self.d_sum = histogram_summary("d", self.D)
     self.d__sum = histogram_summary("d_", self.D_)
@@ -149,9 +150,8 @@ class DCGAN(object):
       except:
         return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, targets=y)
   
-    scaled_scores = self.scores / 8.0
     self.d_loss_real = tf.reduce_mean(
-      tf.pow(self.D - scaled_scores, 2))
+      sigmoid_cross_entropy_with_logits(self.D_logits_, tf.ones_like(self.D)))
     self.d_loss_fake = tf.reduce_mean(
       sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))
     self.g_loss = tf.reduce_mean(
@@ -187,8 +187,8 @@ class DCGAN(object):
     self.data = self.data[self.training_subset:self.test_subset]
     batch_scores = self.all_scores
 
-    self.D, self.D_logits = \
-        self.discriminator(self.inputs, reuse=True)
+    self.D, self.D_logits, self.D_similarity = \
+        self.discriminator(self.inputs, self.scores, reuse=True)
 
     batch_files = self.data
     batch = [
@@ -208,10 +208,9 @@ class DCGAN(object):
     batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
           .astype(np.float32)
 
-    summary_str, D = self.sess.run([self.d_merge_sum_predict, self.D],
+    summary_str, D_similarity = self.sess.run([self.d_merge_sum_predict, self.D_similarity],
             feed_dict={ self.inputs: batch_images, self.z: batch_z, self.scores: batch_scores })
-    D *= 8
-    print(summary_str, D, batch_scores)
+    print(summary_str, D_similarity, batch_scores)
     self.writer = SummaryWriter("./logs", self.sess.graph)
     self.writer.add_summary(summary_str, 0) # TODO: counter??
 
@@ -276,6 +275,7 @@ class DCGAN(object):
           batch_labels = self.data_y[idx*config.batch_size:(idx+1)*config.batch_size]
         else:
           batch_scores = self.all_scores[idx*config.batch_size:(idx+1)*config.batch_size].astype(np.float32)
+          print("batch_scores", batch_scores, type(batch_scores), type(batch_scores[0]))
           batch_files = self.data[idx*config.batch_size:(idx+1)*config.batch_size]
           batch = [
               get_image(batch_file,
@@ -300,6 +300,7 @@ class DCGAN(object):
               self.inputs: batch_images,
               self.z: batch_z,
               self.y:batch_labels,
+              self.scores:batch_scores,
             })
           self.writer.add_summary(summary_str, counter)
 
@@ -308,12 +309,13 @@ class DCGAN(object):
             feed_dict={
               self.z: batch_z, 
               self.y:batch_labels,
+              self.scores:batch_scores,
             })
           self.writer.add_summary(summary_str, counter)
 
           # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
           _, summary_str = self.sess.run([g_optim, self.g_sum],
-            feed_dict={ self.z: batch_z, self.y:batch_labels })
+            feed_dict={ self.z: batch_z, self.y:batch_labels, self.scores:batch_scores,})
           self.writer.add_summary(summary_str, counter)
           
           errD_fake = self.d_loss_fake.eval({
@@ -322,11 +324,13 @@ class DCGAN(object):
           })
           errD_real = self.d_loss_real.eval({
               self.inputs: batch_images,
-              self.y:batch_labels
+              self.y:batch_labels,
+              self.scores: batch_scores,
           })
           errG = self.g_loss.eval({
               self.z: batch_z,
-              self.y: batch_labels
+              self.y: batch_labels,
+              self.scores: batch_scores,
           })
         else:
           # Update D network
@@ -361,6 +365,7 @@ class DCGAN(object):
                   self.z: sample_z,
                   self.inputs: sample_inputs,
                   self.y:sample_labels,
+                  self.scores: batch_scores,
               }
             )
             manifold_h = int(np.ceil(np.sqrt(samples.shape[0])))
@@ -375,6 +380,7 @@ class DCGAN(object):
                 feed_dict={
                     self.z: sample_z,
                     self.inputs: sample_inputs,
+                    self.scores: batch_scores,
                 },
               )
               manifold_h = int(np.ceil(np.sqrt(samples.shape[0])))
@@ -389,7 +395,7 @@ class DCGAN(object):
           self.save(config.checkpoint_dir, counter)
 
 
-  def discriminator(self, image, y=None, reuse=False):
+  def discriminator(self, image, scores, y=None, reuse=False):
     with tf.variable_scope("discriminator") as scope:
       if reuse:
         scope.reuse_variables()
@@ -399,9 +405,13 @@ class DCGAN(object):
         h1 = lrelu(self.d_bn1(conv2d(h0, self.df_dim*2, name='d_h1_conv')))
         h2 = lrelu(self.d_bn2(conv2d(h1, self.df_dim*4, name='d_h2_conv')))
         h3 = lrelu(self.d_bn3(conv2d(h2, self.df_dim*8, name='d_h3_conv')))
-        h4 = linear(tf.reshape(h3, [self.batch_size, -1]), 1, 'd_h3_lin')
+        h4 = linear(tf.reshape(h3, [self.batch_size, -1]), 1, 'd_h4_lin')
+        h5 = tf.layers.dense(inputs=tf.abs(tf.subtract(h4, scores)),\
+                   units=1, activation=tf.nn.sigmoid, name='d_h5_sigmoid')
 
-        return tf.nn.sigmoid(h4), h4
+        print("shape of discriminator output(h4): ", tf.shape(h3))
+
+        return tf.nn.sigmoid(h5), h5, h4
       else:
         yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
         x = conv_cond_concat(image, yb)
@@ -418,8 +428,6 @@ class DCGAN(object):
 
         h3 = linear(h2, 1, 'd_h3_lin')
         
-#        print("shape of discriminator output(h3): ", tf.shape(h3))
-
         return tf.nn.sigmoid(h3), h3
 
   def generator(self, z, y=None):
