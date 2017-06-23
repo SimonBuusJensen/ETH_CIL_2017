@@ -151,11 +151,11 @@ class DCGAN(object):
         return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, targets=y)
   
     self.d_loss_real = tf.reduce_mean(
-      sigmoid_cross_entropy_with_logits(self.D_logits, tf.ones_like(self.D)))
+      sigmoid_cross_entropy_with_logits(self.D_logits, tf.zeros_like(self.D)))
     self.d_loss_fake = tf.reduce_mean(
       sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))
     self.g_loss = tf.reduce_mean(
-      sigmoid_cross_entropy_with_logits(self.D_logits_, tf.ones_like(self.D_)))
+      sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))
 
     self.d_loss_real_sum = scalar_summary("d_loss_real", self.d_loss_real)
     self.d_loss_fake_sum = scalar_summary("d_loss_fake", self.d_loss_fake)
@@ -181,7 +181,7 @@ class DCGAN(object):
     if not self.training_subset:
       print("provide prediction set")
     # getting the test subset
-    self.test_subset = min(self.training_subset + 64, len(self.all_scores))
+    self.test_subset = min(self.training_subset + self.batch_size, len(self.all_scores))
 
     self.all_scores = self.all_scores[self.training_subset:self.test_subset]
     self.data = self.data[self.training_subset:self.test_subset]
@@ -408,10 +408,11 @@ class DCGAN(object):
         h2 = lrelu(self.d_bn2(conv2d(h1, self.df_dim*4, name='d_h2_conv')))
         h3 = lrelu(self.d_bn3(conv2d(h2, self.df_dim*8, name='d_h3_conv')))
         h4 = linear(tf.reshape(h3, [self.batch_size, -1]), 1, 'd_h4_lin')
-        h5 = tf.layers.dense(inputs=tf.abs(tf.subtract(h4, scores)),\
-                   units=1, activation=tf.nn.sigmoid, name='d_h5_sigmoid')
-
-        print("shape of discriminator output(h4): ", tf.shape(h3))
+#        h5 = tf.layers.dense(inputs=\
+#                   tf.pow(tf.subtract(h4, scores), tf.fill(tf.shape(h4), 2.0)),\
+#                   units=1, activation=tf.nn.sigmoid, name='d_h5_sigmoid')
+        h5 = tf.pow(tf.subtract(h4, scores), tf.fill(tf.shape(h4), 2.0))
+        print("shape of discriminator output(h4): ", tf.shape(h4))
 
         return tf.nn.sigmoid(h5), h5, h4
       else:
