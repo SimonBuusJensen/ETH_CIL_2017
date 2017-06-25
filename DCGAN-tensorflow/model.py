@@ -200,7 +200,7 @@ class DCGAN(object):
                 crop=self.crop,
                 grayscale=self.grayscale) for batch_file in batch_files]
     batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
-    
+
     self.d_sum_predict = histogram_summary("d_predicted", self.D)
     self.d_merge_sum_predict = merge_summary(
         [self.d_loss_real_sum, self.d_loss_sum, self.d_sum_predict])
@@ -227,13 +227,10 @@ class DCGAN(object):
       self.D, self.D_logits, self.D_similarity = \
               self.discriminator(self.inputs, self.scores, reuse=True)
 
-      for epoch in xrange(config.epoch):
-        batch_idxs = min(len(self.data), config.batch_size) // config.batch_size
-
-        for idx in xrange(0, batch_idxs):
-
-            batch_files = self.data[idx*config.batch_size:(idx+1)*config.batch_size]
-            batch = [
+      batch_idxs = len(self.data)
+      for idx in xrange(0, batch_idxs):
+          batch_files = self.data[idx*config.batch_size:(idx+1)*config.batch_size]
+          batch = [
               get_image(batch_file,
                         input_height=self.input_height,
                         input_width=self.input_width,
@@ -241,21 +238,29 @@ class DCGAN(object):
                         resize_width=self.output_width,
                         crop=self.crop,
                         grayscale=self.grayscale) for batch_file in batch_files]
-            batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
+          batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
             
-            self.d_sum_predict = histogram_summary("d_predicted", self.D)
-            self.d_merge_sum_predict = merge_summary(
+          '''if len(batch_images) < self.batch_size:
+            size_diff = self.batch_size - len(batch_images)
+            zeros = np.zeros(shape=(self.input_height, self.input_width, 1))
+            print("batch image shape: ", np.shape(batch_images))
+            print("zero image shape: ", np.shape(zeros))
+            for i in range(size_diff):
+              np.vstack((batch_images,zeros))'''
+
+          self.d_sum_predict = histogram_summary("d_predicted", self.D)
+          self.d_merge_sum_predict = merge_summary(
                 [self.d_loss_real_sum, self.d_loss_sum, self.d_sum_predict])
 
-            batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
+          batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
                   .astype(np.float32)
 
-            summary_str, D_similarity, D = self.sess.run([self.d_merge_sum_predict, self.D_similarity, self.D],
+          summary_str, D_similarity, D = self.sess.run([self.d_merge_sum_predict, self.D_similarity, self.D],
                     feed_dict={ self.inputs: batch_images, self.z: batch_z, self.scores: [0]*config.batch_size})
 
 
-            print("similarities predicted: ", D_similarity)
-            print("D values:", D)
+          print(D_similarity)
+#            print("D values:", D)
 
   
   def train(self, config):
@@ -309,8 +314,8 @@ class DCGAN(object):
       else:      
         self.data = glob(os.path.join(
           self.data_path, config.dataset, self.input_fname_pattern))
-        batch_idxs = min(len(self.data), config.batch_size) // config.batch_size
-#        batch_idxs = min(len(self.data), config.train_size) // config.batch_size
+#        batch_idxs = min(len(self.data), config.batch_size) // config.batch_size
+        batch_idxs = min(len(self.data), config.train_size) // config.batch_size
 
       for idx in xrange(0, batch_idxs):
         if config.dataset == 'mnist':
