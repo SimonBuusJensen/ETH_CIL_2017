@@ -106,10 +106,10 @@ class DCGAN(object):
     if self.y_dim:
       self.y= tf.placeholder(tf.float32, [self.batch_size, self.y_dim], name='y')
 
-    if self.crop:
-      image_dims = [self.output_height, self.output_width, self.c_dim]
-    else:
-      image_dims = [self.input_height, self.input_width, self.c_dim]
+    #if self.crop:
+    image_dims = [self.output_height, self.output_width, self.c_dim]
+    #else:
+    #  image_dims = [self.input_height, self.input_width, self.c_dim]
 
     self.inputs = tf.placeholder(
       tf.float32, [self.batch_size] + image_dims, name='real_images')
@@ -212,9 +212,9 @@ class DCGAN(object):
             feed_dict={ self.inputs: batch_images, self.z: batch_z, self.scores: batch_scores })
     
 #    print("files predicted: ", batch_files)
-    print("actual similarities: ", batch_scores)
-    print("similarities predicted: ", D_similarity)
-    print("D values:", D)
+#    print("actual similarities: ", batch_scores)
+#    print("similarities predicted: ", D_similarity)
+#    print("D values:", D)
     
     self.predict_query(config)
     self.writer = SummaryWriter("./logs", self.sess.graph)
@@ -227,9 +227,11 @@ class DCGAN(object):
       self.D, self.D_logits, self.D_similarity = \
               self.discriminator(self.inputs, self.scores, reuse=True)
 
-      batch_idxs = len(self.data)
-      for idx in xrange(0, batch_idxs):
-          batch_files = self.data[idx*config.batch_size:(idx+1)*config.batch_size]
+      batch_idxs = int(np.ceil(len(self.data)/config.batch_size))
+      for idx in range(0, batch_idxs):
+          start_idx = idx*config.batch_size
+          end_idx = min(len(self.data), (idx+1)*config.batch_size)
+          batch_files = self.data[start_idx:end_idx]
           batch = [
               get_image(batch_file,
                         input_height=self.input_height,
@@ -238,16 +240,18 @@ class DCGAN(object):
                         resize_width=self.output_width,
                         crop=self.crop,
                         grayscale=self.grayscale) for batch_file in batch_files]
+          #print("1 batch image shape: ", np.shape(np.array(batch).astype(np.float32)))
           batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
             
           if len(batch_images) < self.batch_size:
             size_diff = self.batch_size - len(batch_images)
             zeros = np.zeros(shape=(self.input_height, self.input_width, 1))
-            print("batch image shape: ", np.shape(batch_images))
-            print("zero image shape: ", np.shape(zeros))
+            #print("2 batch image shape: ", np.shape(batch_images))
+            #print("zero image shape: ", np.shape(zeros))
             for i in range(size_diff):
-              np.vstack((batch_images,[zeros]))
+              batch_images = np.vstack((batch_images,[zeros]))
 
+          #print("3 batch image shape: ", np.shape(batch_images))
           self.d_sum_predict = histogram_summary("d_predicted", self.D)
           self.d_merge_sum_predict = merge_summary(
                 [self.d_loss_real_sum, self.d_loss_sum, self.d_sum_predict])
@@ -315,8 +319,9 @@ class DCGAN(object):
         self.data = glob(os.path.join(
           self.data_path, config.dataset, self.input_fname_pattern))
 #        batch_idxs = min(len(self.data), config.batch_size) // config.batch_size
-        batch_idxs = min(len(self.data), config.train_size) // config.batch_size
-
+        batch_idxs = min(len(self.all_scores), config.train_size) // config.batch_size
+      print("len of data: ", len(self.data))
+      print("len of scores: ", len(self.all_scores))
       for idx in xrange(0, batch_idxs):
         if config.dataset == 'mnist':
           batch_images = self.data_X[idx*config.batch_size:(idx+1)*config.batch_size]
