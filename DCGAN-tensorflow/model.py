@@ -240,13 +240,13 @@ class DCGAN(object):
                         grayscale=self.grayscale) for batch_file in batch_files]
           batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
             
-          '''if len(batch_images) < self.batch_size:
+          if len(batch_images) < self.batch_size:
             size_diff = self.batch_size - len(batch_images)
             zeros = np.zeros(shape=(self.input_height, self.input_width, 1))
             print("batch image shape: ", np.shape(batch_images))
             print("zero image shape: ", np.shape(zeros))
             for i in range(size_diff):
-              np.vstack((batch_images,zeros))'''
+              np.vstack((batch_images,[zeros]))
 
           self.d_sum_predict = histogram_summary("d_predicted", self.D)
           self.d_merge_sum_predict = merge_summary(
