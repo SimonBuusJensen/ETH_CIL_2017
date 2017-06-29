@@ -212,9 +212,9 @@ class DCGAN(object):
             feed_dict={ self.inputs: batch_images, self.z: batch_z, self.scores: batch_scores })
     
 #    print("files predicted: ", batch_files)
-#    print("actual similarities: ", batch_scores)
-#    print("similarities predicted: ", D_similarity)
-#    print("D values:", D)
+    print("actual similarities: ", batch_scores)
+    print("similarities predicted: ", D_similarity)
+    print("D values:", D)
     
     self.predict_query(config)
     self.writer = SummaryWriter("./logs", self.sess.graph)
@@ -226,7 +226,7 @@ class DCGAN(object):
       self.data = glob(os.path.join(self.data_path, "query", self.input_fname_pattern))
       self.D, self.D_logits, self.D_similarity = \
               self.discriminator(self.inputs, self.scores, reuse=True)
-
+      #print(self.data)
       batch_idxs = int(np.ceil(len(self.data)/config.batch_size))
       for idx in range(0, batch_idxs):
           start_idx = idx*config.batch_size
@@ -245,11 +245,12 @@ class DCGAN(object):
             
           if len(batch_images) < self.batch_size:
             size_diff = self.batch_size - len(batch_images)
-            zeros = np.zeros(shape=(self.input_height, self.input_width, 1))
+            zeros = np.zeros(shape=(self.output_height, self.output_width, 1))
             #print("2 batch image shape: ", np.shape(batch_images))
             #print("zero image shape: ", np.shape(zeros))
             for i in range(size_diff):
               batch_images = np.vstack((batch_images,[zeros]))
+              batch_files = np.concatenate((batch_files,["dummy"]))
 
           #print("3 batch image shape: ", np.shape(batch_images))
           self.d_sum_predict = histogram_summary("d_predicted", self.D)
@@ -261,10 +262,10 @@ class DCGAN(object):
 
           summary_str, D_similarity, D = self.sess.run([self.d_merge_sum_predict, self.D_similarity, self.D],
                     feed_dict={ self.inputs: batch_images, self.z: batch_z, self.scores: [0]*config.batch_size})
-
-
-          print(D_similarity)
-#            print("D values:", D)
+          #print(batch_files, D_similarity)
+          for i in range(self.batch_size):
+            print(batch_files[i], ",", D_similarity[i])
+            #print("D values:", D)
 
   
   def train(self, config):
