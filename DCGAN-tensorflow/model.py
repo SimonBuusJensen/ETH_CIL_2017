@@ -8,6 +8,7 @@ import numpy as np
 from six.moves import xrange
 import pandas as pd
 import numpy as np
+import scipy.misc
 
 from ops import *
 from utils import *
@@ -360,10 +361,13 @@ class DCGAN(object):
         self.writer.add_summary(summary_str, counter)
 
         # Update G network
-        _, summary_str = self.sess.run([g_optim, self.g_sum],
+        _, summary_str, reconstruction = self.sess.run([g_optim, self.g_sum, self.G],
           feed_dict={ self.inputs: batch_images, self.scores: batch_scores})
         self.writer.add_summary(summary_str, counter)
-
+        reconstruction_image = (np.reshape(reconstruction, (self.output_width, self.output_height)))
+#        plt.imsave("samples/{}.png".format(counter),reconstruction_image)
+        if counter % 10 == 0:
+          scipy.misc.imsave("samples/{}.png".format(counter),reconstruction_image)
         # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
         _, summary_str = self.sess.run([g_optim, self.g_sum],
           feed_dict={ self.inputs: batch_images, self.scores: batch_scores})
@@ -467,6 +471,21 @@ class DCGAN(object):
       b_reconstruct = self.bias_variable([self.n_pixels], 'g_b_reconstruct')
       reconstruction = tf.nn.sigmoid(self.FC_layer(h_dec, W_reconstruct, b_reconstruct))
       return reconstruction
+
+#  def generate(image):
+##    num_pairs = 20
+##    image_indices = np.random.randint(0, 200, num_pairs)
+##    for pair in range(num_pairs):
+#      x = np.reshape(image, (1,self.n_pixels))
+#        plt.figure()
+#        x_image = np.reshape(x, (size))
+##        plt.subplot(121)
+##        plt.imshow(x_image)
+#        x_reconstruction = self.eval(feed_dict={X: x})
+#        x_reconstruction_image = (np.reshape(x_reconstruction, (size)))
+#        plt.imsave("/home/intergalactic/Prashanth/batch_output/{}.png".format(pair),x_reconstruction_image)
+
+
 
 #  def generator(self, z, y=None):
 #    with tf.variable_scope("generator") as scope:

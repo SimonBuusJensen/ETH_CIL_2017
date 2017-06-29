@@ -95,6 +95,7 @@ def main(_):
     # Below is codes for visualization
     OPTION = 1
     #visualize(sess, dcgan, FLAGS, OPTION)
+#    dcgan.generate()
 
 if __name__ == '__main__':
   tf.app.run()
