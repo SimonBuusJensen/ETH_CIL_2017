@@ -338,37 +338,42 @@ class DCGAN(object):
 
   
   def encoder(self, X):
-    W_enc = self.weight_variable([self.n_pixels, self.h_dim], 'e_W_enc')
-    b_enc = self.bias_variable([self.h_dim], 'e_b_enc')
+    with tf.variable_scope("generator") as scope:
 
-    # tanh activation function to replicate original model
+      W_enc = self.weight_variable([self.n_pixels, self.h_dim], 'e_W_enc')
+      b_enc = self.bias_variable([self.h_dim], 'e_b_enc')
 
-    h_enc = tf.nn.tanh(self.FC_layer(X, W_enc, b_enc))
+      # tanh activation function to replicate original model
 
-    W_mu = self.weight_variable([self.h_dim, self.latent_dim], 'e_W_mu')
-    b_mu = self.bias_variable([self.latent_dim], 'e_b_mu')
-    mu = self.FC_layer(h_enc, W_mu, b_mu)
+      h_enc = tf.nn.tanh(self.FC_layer(X, W_enc, b_enc))
 
-    W_logstd = self.weight_variable([self.h_dim, self.latent_dim], 'e_W_logstd')
-    b_logstd = self.bias_variable([self.latent_dim], 'e_b_logstd')
-    logstd = self.FC_layer(h_enc, W_logstd, b_logstd)
+      W_mu = self.weight_variable([self.h_dim, self.latent_dim], 'e_W_mu')
+      b_mu = self.bias_variable([self.latent_dim], 'e_b_mu')
+      mu = self.FC_layer(h_enc, W_mu, b_mu)
 
-    # Reparameterization trick
+      W_logstd = self.weight_variable([self.h_dim, self.latent_dim], 'e_W_logstd')
+      b_logstd = self.bias_variable([self.latent_dim], 'e_b_logstd')
+      logstd = self.FC_layer(h_enc, W_logstd, b_logstd)
 
-    noise = tf.random_normal([1, self.latent_dim])
-    z = mu + tf.multiply(noise, tf.exp(.5*logstd))
-    return z, logstd, mu
+      # Reparameterization trick
+
+      noise = tf.random_normal([1, self.latent_dim])
+      z = mu + tf.multiply(noise, tf.exp(.5*logstd))
+      return z, logstd, mu
   
   def generator(self, z):
-    W_dec = self.weight_variable([self.latent_dim, self.h_dim], 'g_W_dec')
-    b_dec = self.bias_variable([self.h_dim], 'g_b_dec')
-    h_dec = tf.nn.tanh(self.FC_layer(z, W_dec, b_dec))
-
-    W_reconstruct = self.weight_variable([self.h_dim, self.n_pixels], 'g_W_reconstruct')
-    b_reconstruct = self.bias_variable([self.n_pixels], 'g_b_reconstruct')
-    reconstruction = tf.nn.sigmoid(self.FC_layer(h_dec, W_reconstruct, b_reconstruct))
-    return reconstruction
   
+    with tf.variable_scope("generator") as scope:
+
+      W_dec = self.weight_variable([self.latent_dim, self.h_dim], 'g_W_dec')
+      b_dec = self.bias_variable([self.h_dim], 'g_b_dec')
+      h_dec = tf.nn.tanh(self.FC_layer(z, W_dec, b_dec))
+
+      W_reconstruct = self.weight_variable([self.h_dim, self.n_pixels], 'g_W_reconstruct')
+      b_reconstruct = self.bias_variable([self.n_pixels], 'g_b_reconstruct')
+      reconstruction = tf.nn.sigmoid(self.FC_layer(h_dec, W_reconstruct, b_reconstruct))
+      return reconstruction
+
 #  def generator(self, z, y=None):
 #    with tf.variable_scope("generator") as scope:
 #      if not self.y_dim:
