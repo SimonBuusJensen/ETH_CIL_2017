@@ -178,6 +178,100 @@ class DCGAN(object):
     self.saver = tf.train.Saver()
   
   
+  def predict(self, config):
+    df = pd.read_csv(os.path.join(self.data_path,"scored.csv"))
+    self.all_scores = np.array(df.sort_values(by='Id')['Actual'])
+    self.data = glob(os.path.join(self.data_path, self.dataset_name, self.input_fname_pattern))
+
+    if not self.training_subset:
+      print("provide prediction set")
+    # getting the test subset
+    self.test_subset = min(self.training_subset + self.batch_size, len(self.all_scores))
+
+    self.all_scores = self.all_scores[self.training_subset:self.test_subset]
+    self.data = self.data[self.training_subset:self.test_subset]
+    batch_scores = self.all_scores
+
+    self.D, self.D_logits, self.D_similarity = \
+        self.discriminator(self.inputs, self.scores, reuse=True)
+
+    batch_files = self.data
+    batch = [
+      get_image(batch_file,
+                input_height=self.input_height,
+                input_width=self.input_width,
+                resize_height=self.output_height,
+                resize_width=self.output_width,
+                crop=self.crop,
+                grayscale=self.grayscale) for batch_file in batch_files]
+    batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
+
+    self.d_sum_predict = histogram_summary("d_predicted", self.D)
+    self.d_merge_sum_predict = merge_summary(
+        [self.d_loss_real_sum, self.d_loss_sum, self.d_sum_predict])
+
+    batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
+          .astype(np.float32)
+
+    summary_str, D_similarity, D = self.sess.run([self.d_merge_sum_predict, self.D_similarity, self.D],
+            feed_dict={ self.inputs: batch_images, self.z: batch_z, self.scores: batch_scores })
+    
+#    print("files predicted: ", batch_files)
+    print("actual similarities: ", batch_scores)
+    print("similarities predicted: ", D_similarity)
+    print("D values:", D)
+    
+    self.predict_query(config)
+    self.writer = SummaryWriter("./logs", self.sess.graph)
+    self.writer.add_summary(summary_str, 0) # TODO: counter??
+
+
+
+  def predict_query(self, config):
+      self.data = glob(os.path.join(self.data_path, "query", self.input_fname_pattern))
+      self.D, self.D_logits, self.D_similarity = \
+              self.discriminator(self.inputs, self.scores, reuse=True)
+      #print(self.data)
+      batch_idxs = int(np.ceil(len(self.data)/config.batch_size))
+      for idx in range(0, batch_idxs):
+          start_idx = idx*config.batch_size
+          end_idx = min(len(self.data), (idx+1)*config.batch_size)
+          batch_files = self.data[start_idx:end_idx]
+          batch = [
+              get_image(batch_file,
+                        input_height=self.input_height,
+                        input_width=self.input_width,
+                        resize_height=self.output_height,
+                        resize_width=self.output_width,
+                        crop=self.crop,
+                        grayscale=self.grayscale) for batch_file in batch_files]
+          #print("1 batch image shape: ", np.shape(np.array(batch).astype(np.float32)))
+          batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
+            
+          if len(batch_images) < self.batch_size:
+            size_diff = self.batch_size - len(batch_images)
+            zeros = np.zeros(shape=(self.output_height, self.output_width, 1))
+            #print("2 batch image shape: ", np.shape(batch_images))
+            #print("zero image shape: ", np.shape(zeros))
+            for i in range(size_diff):
+              batch_images = np.vstack((batch_images,[zeros]))
+              batch_files = np.concatenate((batch_files,["dummy"]))
+
+          #print("3 batch image shape: ", np.shape(batch_images))
+          self.d_sum_predict = histogram_summary("d_predicted", self.D)
+          self.d_merge_sum_predict = merge_summary(
+                [self.d_loss_real_sum, self.d_loss_sum, self.d_sum_predict])
+
+          batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
+                  .astype(np.float32)
+
+          summary_str, D_similarity, D = self.sess.run([self.d_merge_sum_predict, self.D_similarity, self.D],
+                    feed_dict={ self.inputs: batch_images, self.z: batch_z, self.scores: [0]*config.batch_size})
+          #print(batch_files, D_similarity)
+          for i in range(self.batch_size):
+            print(batch_files[i], ",", D_similarity[i])
+            #print("D values:", D)
+
 
   def train(self, config):
     d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
@@ -240,7 +334,6 @@ class DCGAN(object):
 #        print("shape of train_data:", np.shape(train_data), len(train_data))
 #        random.shuffle(train_data)
 #        batch_files, batch_scores = zip(*train_data)
-
         batch = [
             get_image(batch_file,
                       input_height=self.input_height,
@@ -249,12 +342,13 @@ class DCGAN(object):
                       resize_width=self.output_width,
                       crop=self.crop,
                       grayscale=self.grayscale) for batch_file in batch_files]
-        
+
         if self.grayscale:
           batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
         else:
           batch_images = np.array(batch).astype(np.float32)
 
+        print("--------------------shape of image: ", np.shape(batch_images))
 #        print("batch_scores", np.shape(batch_scores), type(batch_scores), type(batch_scores[0]))
 #        batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
 #              .astype(np.float32)
@@ -275,9 +369,9 @@ class DCGAN(object):
           feed_dict={ self.inputs: batch_images, self.scores: batch_scores})
         self.writer.add_summary(summary_str, counter)
         
-        errD_fake = self.d_loss_fake.eval({ self.scores: batch_scores })
+        errD_fake = self.d_loss_fake.eval({ self.inputs: batch_images, self.scores: batch_scores })
         errD_real = self.d_loss_real.eval({ self.inputs: batch_images, self.scores: batch_scores })
-        errG = self.g_loss.eval({ self.scores: batch_scores })
+        errG = self.g_loss.eval({ self.inputs: batch_images, self.scores: batch_scores })
 
         counter += 1
         print("Epoch: [%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
@@ -546,100 +640,6 @@ class DCGAN(object):
 #      y_vec[i,y[i]] = 1.0
 #    
 #    return X/255.,y_vec
-
-  def predict(self, config):
-    df = pd.read_csv(os.path.join(self.data_path,"scored.csv"))
-    self.all_scores = np.array(df.sort_values(by='Id')['Actual'])
-    self.data = glob(os.path.join(self.data_path, self.dataset_name, self.input_fname_pattern))
-
-    if not self.training_subset:
-      print("provide prediction set")
-    # getting the test subset
-    self.test_subset = min(self.training_subset + self.batch_size, len(self.all_scores))
-
-    self.all_scores = self.all_scores[self.training_subset:self.test_subset]
-    self.data = self.data[self.training_subset:self.test_subset]
-    batch_scores = self.all_scores
-
-    self.D, self.D_logits, self.D_similarity = \
-        self.discriminator(self.inputs, self.scores, reuse=True)
-
-    batch_files = self.data
-    batch = [
-      get_image(batch_file,
-                input_height=self.input_height,
-                input_width=self.input_width,
-                resize_height=self.output_height,
-                resize_width=self.output_width,
-                crop=self.crop,
-                grayscale=self.grayscale) for batch_file in batch_files]
-    batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
-
-    self.d_sum_predict = histogram_summary("d_predicted", self.D)
-    self.d_merge_sum_predict = merge_summary(
-        [self.d_loss_real_sum, self.d_loss_sum, self.d_sum_predict])
-
-    batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
-          .astype(np.float32)
-
-    summary_str, D_similarity, D = self.sess.run([self.d_merge_sum_predict, self.D_similarity, self.D],
-            feed_dict={ self.inputs: batch_images, self.z: batch_z, self.scores: batch_scores })
-    
-#    print("files predicted: ", batch_files)
-#    print("actual similarities: ", batch_scores)
-#    print("similarities predicted: ", D_similarity)
-#    print("D values:", D)
-    
-    self.predict_query(config)
-    self.writer = SummaryWriter("./logs", self.sess.graph)
-    self.writer.add_summary(summary_str, 0) # TODO: counter??
-
-
-
-  def predict_query(self, config):
-      self.data = glob(os.path.join(self.data_path, "query", self.input_fname_pattern))
-      self.D, self.D_logits, self.D_similarity = \
-              self.discriminator(self.inputs, self.scores, reuse=True)
-
-      batch_idxs = int(np.ceil(len(self.data)/config.batch_size))
-      for idx in range(0, batch_idxs):
-          start_idx = idx*config.batch_size
-          end_idx = min(len(self.data), (idx+1)*config.batch_size)
-          batch_files = self.data[start_idx:end_idx]
-          batch = [
-              get_image(batch_file,
-                        input_height=self.input_height,
-                        input_width=self.input_width,
-                        resize_height=self.output_height,
-                        resize_width=self.output_width,
-                        crop=self.crop,
-                        grayscale=self.grayscale) for batch_file in batch_files]
-          #print("1 batch image shape: ", np.shape(np.array(batch).astype(np.float32)))
-          batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
-            
-          if len(batch_images) < self.batch_size:
-            size_diff = self.batch_size - len(batch_images)
-            zeros = np.zeros(shape=(self.input_height, self.input_width, 1))
-            #print("2 batch image shape: ", np.shape(batch_images))
-            #print("zero image shape: ", np.shape(zeros))
-            for i in range(size_diff):
-              batch_images = np.vstack((batch_images,[zeros]))
-
-          #print("3 batch image shape: ", np.shape(batch_images))
-          self.d_sum_predict = histogram_summary("d_predicted", self.D)
-          self.d_merge_sum_predict = merge_summary(
-                [self.d_loss_real_sum, self.d_loss_sum, self.d_sum_predict])
-
-          batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
-                  .astype(np.float32)
-
-          summary_str, D_similarity, D = self.sess.run([self.d_merge_sum_predict, self.D_similarity, self.D],
-                    feed_dict={ self.inputs: batch_images, self.z: batch_z, self.scores: [0]*config.batch_size})
-
-
-          print(D_similarity)
-#            print("D values:", D)
-
 
 
   @property
