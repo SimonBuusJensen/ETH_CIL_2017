@@ -80,8 +80,11 @@ class DCGAN(object):
     self.checkpoint_dir = checkpoint_dir
 
     df = pd.read_csv(os.path.join(self.data_path,"scored.csv"))
+    labeled_df = pd.read_csv(os.path.join(self.data_path,"labeled.csv"))
+    labeled_df = labeled_df[labeled_df['Actual']==1.0]
     self.all_scores = np.array(df.sort_values(by='Id')['Actual'])
     self.data = glob(os.path.join(self.data_path, self.dataset_name, self.input_fname_pattern))
+    self.labeled_data = glob(os.path.join(self.data_path, "labeled", self.input_fname_pattern))
     self.training_subset = training_subset
     
     if not training_subset:
@@ -89,6 +92,10 @@ class DCGAN(object):
 
     self.all_scores = self.all_scores[:training_subset]
     self.data = self.data[:training_subset]
+    print("len of labeled_data ", len(self.labeled_data))
+    print("labeled_data ", self.labeled_data[1], self.labeled_data[1][40:47])
+    self.labeled_data = [d for d in self.labeled_data if int(d[40:47]) in list(labeled_df["Id"])]
+    print("len of labeled_data ", len(self.labeled_data))
 #      print(len(self.all_scores))
 #      print(os.path.join(self.data_path, self.dataset_name, self.input_fname_pattern), self.data[:10])
     imreadImg = imread(self.data[0])
@@ -114,11 +121,14 @@ class DCGAN(object):
 
     self.inputs = tf.placeholder(
       tf.float32, [self.batch_size] + image_dims, name='real_images')
+    self.labeled_inputs = tf.placeholder(
+      tf.float32, [self.batch_size] + image_dims, name='labeled_images')
     self.sample_inputs = tf.placeholder(
       tf.float32, [self.sample_num] + image_dims, name='sample_inputs')
     self.scores = tf.placeholder(tf.float32, [self.batch_size], name='similarity_scores')
     
     inputs = self.inputs
+    labeled_inputs = self.labeled_inputs
     scores = self.scores
     sample_inputs = self.sample_inputs
 
@@ -126,15 +136,15 @@ class DCGAN(object):
 #      tf.float32, [None, self.z_dim], name='z')
 
 #    self.G = self.generator(self.z)
-    self.input_flattened = tf.reshape(inputs, (1,self.input_height*self.input_width))
-    self.z, self.logstd, self.mu= self.encoder(self.input_flattened)
+    self.labeled_input_flattened = tf.reshape(labeled_inputs, (self.batch_size,self.input_height*self.input_width))
+    self.z, self.logstd, self.mu= self.encoder(self.labeled_input_flattened)
     self.g_flattened = self.generator(self.z)
     self.D, self.D_logits, self.D_similarity = self.discriminator(inputs, scores)
     self.z_sum = histogram_summary("z", self.z)
 
 #      self.sampler = self.sampler(self.z)
 #    print("-------shape of self.G:", self.G.get_shape())
-    self.G = tf.reshape(self.g_flattened, (1, self.input_height, self.input_width, 1))
+    self.G = tf.reshape(self.g_flattened, (self.batch_size, self.input_height, self.input_width, 1))
 #    print("-------shape(g_reshaped):", g_reshaped.get_shape())
 #    print("-------shape(self.G):", inputs)
     self.D_, self.D_logits_, _ = self.discriminator(self.G, scores=tf.zeros_like(self.scores), reuse=True)
@@ -157,7 +167,7 @@ class DCGAN(object):
 #      sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))
 
 
-    log_likelihood = tf.reduce_sum(self.input_flattened*tf.log(self.g_flattened + 1e-9)+(1 - inputs)*tf.log(1 - self.g_flattened + 1e-9), reduction_indices=1)
+    log_likelihood = tf.reduce_sum(self.labeled_input_flattened*tf.log(self.g_flattened + 1e-9)+(1 - self.labeled_input_flattened)*tf.log(1 - self.g_flattened + 1e-9), reduction_indices=1)
     KL_term = -.5 * tf.reduce_sum(1 + 2*self.logstd - tf.pow(self.mu,2) - tf.exp(2*self.logstd), reduction_indices=1)
     variational_lower_bound = tf.reduce_mean(log_likelihood - KL_term)
     self.g_loss = variational_lower_bound
@@ -166,7 +176,7 @@ class DCGAN(object):
     self.d_loss_real_sum = scalar_summary("d_loss_real", self.d_loss_real)
     self.d_loss_fake_sum = scalar_summary("d_loss_fake", self.d_loss_fake)
                           
-    self.d_loss = self.d_loss_real * 0.1 + self.d_loss_fake * 0.9 # TODO: ??
+    self.d_loss = self.d_loss_real + self.d_loss_fake  # TODO: ??
 
     self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
     self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
@@ -328,13 +338,15 @@ class DCGAN(object):
       print("len of scores: ", len(self.all_scores))
       for idx in xrange(0, batch_idxs):
         batch_files = self.data[idx*config.batch_size:(idx+1)*config.batch_size]
+        labeled_batch_files = self.labeled_data[idx*config.batch_size:(idx+1)*config.batch_size]
         batch_scores = self.all_scores[idx*config.batch_size:(idx+1)*config.batch_size].astype(np.float32)
-#        train_data = np.array(zip(batch_files, batch_scores))
-#        print("shape of batch_files:", np.shape(batch_files), len(batch_files))
-#        print("shape of batch_scores:", np.shape(batch_scores), len(batch_scores))
-#        print("shape of train_data:", np.shape(train_data), len(train_data))
-#        random.shuffle(train_data)
-#        batch_files, batch_scores = zip(*train_data)
+        train_data = np.array(list(zip(batch_files, batch_scores)))
+        print("shape of batch_files:", np.shape(batch_files), len(batch_files))
+        print("shape of batch_scores:", np.shape(batch_scores), len(batch_scores))
+        print("shape of train_data:", np.shape(train_data), len(train_data))
+        random.shuffle(train_data)
+        random.shuffle(labeled_batch_files)
+        batch_files, batch_scores = zip(*train_data)
         batch = [
             get_image(batch_file,
                       input_height=self.input_height,
@@ -343,11 +355,22 @@ class DCGAN(object):
                       resize_width=self.output_width,
                       crop=self.crop,
                       grayscale=self.grayscale) for batch_file in batch_files]
+        labeled_batch = [
+            get_image(batch_file,
+                      input_height=self.input_height,
+                      input_width=self.input_width,
+                      resize_height=self.output_height,
+                      resize_width=self.output_width,
+                      crop=self.crop,
+                      grayscale=self.grayscale) for batch_file in labeled_batch_files]
+
 
         if self.grayscale:
           batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
+          labeled_batch_images = np.array(labeled_batch).astype(np.float32)[:, :, :, None]
         else:
           batch_images = np.array(batch).astype(np.float32)
+          labeled_batch_images = np.array(labeled_batch).astype(np.float32)
 
         print("--------------------shape of image: ", np.shape(batch_images))
 #        print("batch_scores", np.shape(batch_scores), type(batch_scores), type(batch_scores[0]))
@@ -357,32 +380,32 @@ class DCGAN(object):
         # Update D network
 #          print("---------np.shape(batch_images):", np.shape(batch_images))
         _, summary_str = self.sess.run([d_optim, self.d_sum],
-          feed_dict={ self.inputs: batch_images, self.scores: batch_scores })
+          feed_dict={ self.inputs: batch_images, self.scores: batch_scores , self.labeled_inputs: labeled_batch_images})
         self.writer.add_summary(summary_str, counter)
 
         # Update G network
         _, summary_str, reconstruction = self.sess.run([g_optim, self.g_sum, self.G],
-          feed_dict={ self.inputs: batch_images, self.scores: batch_scores})
+          feed_dict={ self.inputs: batch_images, self.scores: batch_scores, self.labeled_inputs: labeled_batch_images})
         self.writer.add_summary(summary_str, counter)
-        reconstruction_image = (np.reshape(reconstruction, (self.output_width, self.output_height)))
+        reconstruction_image = (np.reshape(reconstruction, (self.batch_size, self.output_width, self.output_height)))
 #        plt.imsave("samples/{}.png".format(counter),reconstruction_image)
         if counter % 10 == 0:
-          scipy.misc.imsave("samples/{}.png".format(counter),reconstruction_image)
+          scipy.misc.imsave("samples/{}.png".format(counter),reconstruction_image[0])
         # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
         _, summary_str = self.sess.run([g_optim, self.g_sum],
-          feed_dict={ self.inputs: batch_images, self.scores: batch_scores})
+          feed_dict={ self.inputs: batch_images, self.scores: batch_scores, self.labeled_inputs: labeled_batch_images})
         self.writer.add_summary(summary_str, counter)
         
-        errD_fake = self.d_loss_fake.eval({ self.inputs: batch_images, self.scores: batch_scores })
-        errD_real = self.d_loss_real.eval({ self.inputs: batch_images, self.scores: batch_scores })
-        errG = self.g_loss.eval({ self.inputs: batch_images, self.scores: batch_scores })
+        errD_fake = self.d_loss_fake.eval({ self.inputs: batch_images, self.scores: batch_scores , self.labeled_inputs: labeled_batch_images})
+        errD_real = self.d_loss_real.eval({ self.inputs: batch_images, self.scores: batch_scores , self.labeled_inputs: labeled_batch_images})
+        errG = self.g_loss.eval({ self.inputs: batch_images, self.scores: batch_scores , self.labeled_inputs: labeled_batch_images})
 
         counter += 1
         print("Epoch: [%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
           % (epoch, idx, batch_idxs,
             time.time() - start_time, errD_fake+errD_real, errG))
 
-        if np.mod(counter, 100) == 1:
+        '''if np.mod(counter, 100) == 1:
           try:
             samples, d_loss, g_loss = self.sess.run(
               [self.d_loss, self.g_loss],
@@ -397,7 +420,7 @@ class DCGAN(object):
                   './{}/train_{:02d}_{:04d}.png'.format(config.sample_dir, epoch, idx))
             print("[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss, g_loss)) 
           except:
-            print("one pic error!...")
+            print("one pic error!...")'''
 
         if np.mod(counter, 500) == 2:
           self.save(config.checkpoint_dir, counter)
