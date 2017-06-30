@@ -169,14 +169,14 @@ class DCGAN(object):
       sigmoid_cross_entropy_with_logits(self.D_logits, tf.zeros_like(self.D)))
     self.d_loss_fake = tf.reduce_mean(
       sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))
-#    self.g_loss = tf.reduce_mean(
-#      sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))
+    self.g_loss = tf.reduce_mean(
+      sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))
 
 
     log_likelihood = tf.reduce_sum(self.labeled_input_flattened*tf.log(self.g_flattened + 1e-9)+(1 - self.labeled_input_flattened)*tf.log(1 - self.g_flattened + 1e-9), reduction_indices=1)
     KL_term = -.5 * tf.reduce_sum(1 + 2*self.logstd - tf.pow(self.mu,2) - tf.exp(2*self.logstd), reduction_indices=1)
     variational_lower_bound = tf.reduce_mean(log_likelihood - KL_term)
-    self.g_loss = variational_lower_bound
+    self.e_loss = -variational_lower_bound
     
 
     self.d_loss_real_sum = scalar_summary("d_loss_real", self.d_loss_real)
@@ -186,11 +186,12 @@ class DCGAN(object):
 
     self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
     self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
-
+    self.e_loss_sum = scalar_summary("e_loss", self.e_loss)
     t_vars = tf.trainable_variables()
 
     self.d_vars = [var for var in t_vars if 'd_' in var.name]
     self.eg_vars = [var for var in t_vars if 'g_' in var.name or 'e_' in var.name]
+    self.g_vars = [var for var in t_vars if 'g_' in var.name]
 
     self.saver = tf.train.Saver()
   
@@ -295,15 +296,17 @@ class DCGAN(object):
               .minimize(self.d_loss, var_list=self.d_vars)
 #    for g in self.g_vars:
 #        print("self.g: ", tf.shape(g))
-#    g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
-#              .minimize(self.g_loss, var_list=self.g_vars)
-    g_optim = tf.train.AdadeltaOptimizer().minimize(-self.g_loss, var_list=self.eg_vars)
+    g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
+              .minimize(self.g_loss, var_list=self.g_vars)
+    e_optim = tf.train.AdadeltaOptimizer().minimize(self.e_loss, var_list=self.eg_vars)
     
     try:
       tf.global_variables_initializer().run()
     except:
       tf.initialize_all_variables().run()
 
+    self.e_sum = merge_summary([self.z_sum, self.d__sum,
+      self.G_sum, self.d_loss_fake_sum, self.g_loss_sum, self.e_loss_sum])
     self.g_sum = merge_summary([self.z_sum, self.d__sum,
       self.G_sum, self.d_loss_fake_sum, self.g_loss_sum])
     self.d_sum = merge_summary(
@@ -340,16 +343,16 @@ class DCGAN(object):
         self.data_path, config.dataset, self.input_fname_pattern))
 #        batch_idxs = min(len(self.data), config.batch_size) // config.batch_size
       batch_idxs = min(len(self.all_scores), config.train_size) // config.batch_size
-      print("len of data: ", len(self.data))
-      print("len of scores: ", len(self.all_scores))
+      #print("len of data: ", len(self.data))
+      #print("len of scores: ", len(self.all_scores))
       for idx in xrange(0, batch_idxs):
         batch_files = self.data[idx*config.batch_size:(idx+1)*config.batch_size]
         labeled_batch_files = self.labeled_data[idx*config.batch_size:(idx+1)*config.batch_size]
         batch_scores = self.all_scores[idx*config.batch_size:(idx+1)*config.batch_size].astype(np.float32)
         train_data = np.array(list(zip(batch_files, batch_scores)))
-        print("shape of batch_files:", np.shape(batch_files), len(batch_files))
-        print("shape of batch_scores:", np.shape(batch_scores), len(batch_scores))
-        print("shape of train_data:", np.shape(train_data), len(train_data))
+        #print("shape of batch_files:", np.shape(batch_files), len(batch_files))
+        #print("shape of batch_scores:", np.shape(batch_scores), len(batch_scores))
+        #print("shape of train_data:", np.shape(train_data), len(train_data))
         random.shuffle(train_data)
         random.shuffle(labeled_batch_files)
         batch_files, batch_scores = zip(*train_data)
@@ -390,7 +393,7 @@ class DCGAN(object):
         self.writer.add_summary(summary_str, counter)
 
         # Update G network
-        _, summary_str, reconstruction = self.sess.run([g_optim, self.g_sum, self.G],
+        _, summary_str, reconstruction = self.sess.run([e_optim, self.e_sum, self.G],
           feed_dict={ self.inputs: batch_images, self.scores: batch_scores, self.labeled_inputs: labeled_batch_images})
         self.writer.add_summary(summary_str, counter)
         reconstruction_image = (np.reshape(reconstruction, (self.batch_size, self.output_width, self.output_height)))
@@ -405,11 +408,12 @@ class DCGAN(object):
         errD_fake = self.d_loss_fake.eval({ self.inputs: batch_images, self.scores: batch_scores , self.labeled_inputs: labeled_batch_images})
         errD_real = self.d_loss_real.eval({ self.inputs: batch_images, self.scores: batch_scores , self.labeled_inputs: labeled_batch_images})
         errG = self.g_loss.eval({ self.inputs: batch_images, self.scores: batch_scores , self.labeled_inputs: labeled_batch_images})
-
+        errE = self.e_loss.eval({ self.inputs: batch_images, self.scores: batch_scores , self.labeled_inputs: labeled_batch_images})
+       
         counter += 1
-        print("Epoch: [%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
+        print("Epoch: [%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f, e_loss: %.8f" \
           % (epoch, idx, batch_idxs,
-            time.time() - start_time, errD_fake+errD_real, errG))
+            time.time() - start_time, errD_fake+errD_real, errG, errE))
 
         '''if np.mod(counter, 100) == 1:
           try:
