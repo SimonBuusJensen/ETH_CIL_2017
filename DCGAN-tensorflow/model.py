@@ -12,6 +12,7 @@ import scipy.misc
 
 from ops import *
 from utils import *
+import re
 
 def conv_out_size_same(size, stride):
   return int(math.ceil(float(size) / float(stride)))
@@ -84,7 +85,7 @@ class DCGAN(object):
     labeled_df = labeled_df[labeled_df['Actual']==1.0]
     self.all_scores = np.array(df.sort_values(by='Id')['Actual'])
     self.data = glob(os.path.join(self.data_path, self.dataset_name, self.input_fname_pattern))
-    self.labeled_data = glob(os.path.join(self.data_path, "labeled", self.input_fname_pattern))
+    raw_labeled_data = glob(os.path.join(self.data_path, "labeled", self.input_fname_pattern))
     self.training_subset = training_subset
     
     if not training_subset:
@@ -92,9 +93,14 @@ class DCGAN(object):
 
     self.all_scores = self.all_scores[:training_subset]
     self.data = self.data[:training_subset]
+    self.labeled_data = []
     print("len of labeled_data ", len(self.labeled_data))
+    for d in raw_labeled_data:
+      name = re.sub(".png", "", re.findall(r"\d*\.png", d)[0])
+      if int(name) in list(labeled_df["Id"]):
+        self.labeled_data.append(d)
+    
     print("labeled_data ", self.labeled_data[1], self.labeled_data[1][40:47])
-    self.labeled_data = [d for d in self.labeled_data if int(d[40:47]) in list(labeled_df["Id"])]
     print("len of labeled_data ", len(self.labeled_data))
 #      print(len(self.all_scores))
 #      print(os.path.join(self.data_path, self.dataset_name, self.input_fname_pattern), self.data[:10])
