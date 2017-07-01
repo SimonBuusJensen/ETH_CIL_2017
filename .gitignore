@@ -5,3 +5,7 @@ DCGAN-tensorflow/checkpoint
 DCGAN-tensorflow/data
 DCGAN-tensorflow/samples
 DCGAN-tensorflow/logs
+ConvNet/checkpoints
+ConvNet/log
+ConvNet/output
+ConvNet/data/matrices
