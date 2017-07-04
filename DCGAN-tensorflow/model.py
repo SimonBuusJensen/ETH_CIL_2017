@@ -141,7 +141,7 @@ class DCGAN(object):
 #    self.z = tf.placeholder(
 #      tf.float32, [None, self.z_dim], name='z')
 
-#    self.G = self.generator(self.z)
+    # connecting generator and descriminator networks
     self.labeled_input_flattened = tf.reshape(labeled_inputs, (self.batch_size,self.input_height*self.input_width))
     self.z, self.logstd, self.mu= self.encoder(self.labeled_input_flattened)
     self.g_flattened = self.generator(self.z)
@@ -149,30 +149,30 @@ class DCGAN(object):
     self.z_sum = histogram_summary("z", self.z)
 
 #      self.sampler = self.sampler(self.z)
-#    print("-------shape of self.G:", self.G.get_shape())
     self.G = tf.reshape(self.g_flattened, (self.batch_size, self.input_height, self.input_width, 1))
-#    print("-------shape(g_reshaped):", g_reshaped.get_shape())
-#    print("-------shape(self.G):", inputs)
     self.D_, self.D_logits_, _ = self.discriminator(self.G, scores=tf.zeros_like(self.scores), reuse=True)
 
     self.d_sum = histogram_summary("d", self.D)
     self.d__sum = histogram_summary("d_", self.D_)
     self.G_sum = image_summary("G", self.G)
+    
+    # defining loss functions
 
     def sigmoid_cross_entropy_with_logits(x, y):
       try:
         return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=y)
       except:
         return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, targets=y)
-  
+    # loss value for discriminator
     self.d_loss_real = tf.reduce_mean(
       sigmoid_cross_entropy_with_logits(self.D_logits, tf.zeros_like(self.D)))
     self.d_loss_fake = tf.reduce_mean(
       sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))
+    # loss value for generator
     self.g_loss = tf.reduce_mean(
       sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))
 
-
+    # loss value for VAE
     log_likelihood = tf.reduce_sum(self.labeled_input_flattened*tf.log(self.g_flattened + 1e-9)+(1 - self.labeled_input_flattened)*tf.log(1 - self.g_flattened + 1e-9), reduction_indices=1)
     KL_term = -.5 * tf.reduce_sum(1 + 2*self.logstd - tf.pow(self.mu,2) - tf.exp(2*self.logstd), reduction_indices=1)
     variational_lower_bound = tf.reduce_mean(log_likelihood - KL_term)
@@ -182,11 +182,13 @@ class DCGAN(object):
     self.d_loss_real_sum = scalar_summary("d_loss_real", self.d_loss_real)
     self.d_loss_fake_sum = scalar_summary("d_loss_fake", self.d_loss_fake)
                           
-    self.d_loss = self.d_loss_real + self.d_loss_fake  # TODO: ??
+    self.d_loss = self.d_loss_real + self.d_loss_fake
 
     self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
     self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
     self.e_loss_sum = scalar_summary("e_loss", self.e_loss)
+
+    # trainable variables
     t_vars = tf.trainable_variables()
 
     self.d_vars = [var for var in t_vars if 'd_' in var.name]
@@ -197,6 +199,8 @@ class DCGAN(object):
   
   
   def predict(self, config):
+    " function predict: predict similarity scores and d values for a subset of training images"
+    
     df = pd.read_csv(os.path.join(self.data_path,"scored.csv"))
     self.all_scores = np.array(df.sort_values(by='Id')['Actual'])
     self.data = glob(os.path.join(self.data_path, self.dataset_name, self.input_fname_pattern))
@@ -234,18 +238,18 @@ class DCGAN(object):
     summary_str, D_similarity, D = self.sess.run([self.d_merge_sum_predict, self.D_similarity, self.D],
             feed_dict={ self.inputs: batch_images, self.z: batch_z, self.scores: batch_scores })
     
-#    print("files predicted: ", batch_files)
-    print("actual similarities: ", batch_scores)
-    print("similarities predicted: ", D_similarity)
-    print("D values:", D)
-    
+#    print("actual similarities: ", batch_scores)
+#    print("similarities predicted: ", D_similarity)
+#    print("D values:", D)
+
     self.predict_query(config)
     self.writer = SummaryWriter("./logs", self.sess.graph)
-    self.writer.add_summary(summary_str, 0) # TODO: counter??
+    self.writer.add_summary(summary_str, 0)
 
 
 
   def predict_query(self, config):
+      " function predict_query: predict similarity scores for query images"    
       self.data = glob(os.path.join(self.data_path, "query", self.input_fname_pattern))
       self.D, self.D_logits, self.D_similarity = \
               self.discriminator(self.inputs, self.scores, reuse=True)
@@ -263,19 +267,15 @@ class DCGAN(object):
                         resize_width=self.output_width,
                         crop=self.crop,
                         grayscale=self.grayscale) for batch_file in batch_files]
-          #print("1 batch image shape: ", np.shape(np.array(batch).astype(np.float32)))
           batch_images = np.array(batch).astype(np.float32)[:, :, :, None]
             
           if len(batch_images) < self.batch_size:
             size_diff = self.batch_size - len(batch_images)
             zeros = np.zeros(shape=(self.output_height, self.output_width, 1))
-            #print("2 batch image shape: ", np.shape(batch_images))
-            #print("zero image shape: ", np.shape(zeros))
             for i in range(size_diff):
               batch_images = np.vstack((batch_images,[zeros]))
               batch_files = np.concatenate((batch_files,["dummy"]))
 
-          #print("3 batch image shape: ", np.shape(batch_images))
           self.d_sum_predict = histogram_summary("d_predicted", self.D)
           self.d_merge_sum_predict = merge_summary(
                 [self.d_loss_real_sum, self.d_loss_sum, self.d_sum_predict])
@@ -285,17 +285,13 @@ class DCGAN(object):
 
           summary_str, D_similarity, D = self.sess.run([self.d_merge_sum_predict, self.D_similarity, self.D],
                     feed_dict={ self.inputs: batch_images, self.z: batch_z, self.scores: [0]*config.batch_size})
-          #print(batch_files, D_similarity)
           for i in range(self.batch_size):
             print(batch_files[i], ",", D_similarity[i])
-            #print("D values:", D)
 
 
   def train(self, config):
     d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
               .minimize(self.d_loss, var_list=self.d_vars)
-#    for g in self.g_vars:
-#        print("self.g: ", tf.shape(g))
     g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
               .minimize(self.g_loss, var_list=self.g_vars)
     e_optim = tf.train.AdadeltaOptimizer().minimize(self.e_loss, var_list=self.eg_vars)
@@ -343,16 +339,12 @@ class DCGAN(object):
         self.data_path, config.dataset, self.input_fname_pattern))
 #        batch_idxs = min(len(self.data), config.batch_size) // config.batch_size
       batch_idxs = min(len(self.all_scores), config.train_size) // config.batch_size
-      #print("len of data: ", len(self.data))
-      #print("len of scores: ", len(self.all_scores))
       for idx in xrange(0, batch_idxs):
         batch_files = self.data[idx*config.batch_size:(idx+1)*config.batch_size]
         labeled_batch_files = self.labeled_data[idx*config.batch_size:(idx+1)*config.batch_size]
         batch_scores = self.all_scores[idx*config.batch_size:(idx+1)*config.batch_size].astype(np.float32)
         train_data = np.array(list(zip(batch_files, batch_scores)))
-        #print("shape of batch_files:", np.shape(batch_files), len(batch_files))
-        #print("shape of batch_scores:", np.shape(batch_scores), len(batch_scores))
-        #print("shape of train_data:", np.shape(train_data), len(train_data))
+
         random.shuffle(train_data)
         random.shuffle(labeled_batch_files)
         batch_files, batch_scores = zip(*train_data)
@@ -381,13 +373,8 @@ class DCGAN(object):
           batch_images = np.array(batch).astype(np.float32)
           labeled_batch_images = np.array(labeled_batch).astype(np.float32)
 
-        print("--------------------shape of image: ", np.shape(batch_images))
-#        print("batch_scores", np.shape(batch_scores), type(batch_scores), type(batch_scores[0]))
-#        batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
-#              .astype(np.float32)
 
         # Update D network
-#          print("---------np.shape(batch_images):", np.shape(batch_images))
         _, summary_str = self.sess.run([d_optim, self.d_sum],
           feed_dict={ self.inputs: batch_images, self.scores: batch_scores , self.labeled_inputs: labeled_batch_images})
         self.writer.add_summary(summary_str, counter)
@@ -397,9 +384,10 @@ class DCGAN(object):
           feed_dict={ self.inputs: batch_images, self.scores: batch_scores, self.labeled_inputs: labeled_batch_images})
         self.writer.add_summary(summary_str, counter)
         reconstruction_image = (np.reshape(reconstruction, (self.batch_size, self.output_width, self.output_height)))
-#        plt.imsave("samples/{}.png".format(counter),reconstruction_image)
+
         if counter % 10 == 0:
           scipy.misc.imsave("samples/{}.png".format(counter),reconstruction_image[0])
+
         # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
         _, summary_str = self.sess.run([g_optim, self.g_sum],
           feed_dict={ self.inputs: batch_images, self.scores: batch_scores, self.labeled_inputs: labeled_batch_images})
@@ -446,9 +434,6 @@ class DCGAN(object):
 #        h2 = lrelu(self.d_bn2(conv2d(h1, self.df_dim*4, name='d_h2_conv')))
 #        h3 = lrelu(self.d_bn3(conv2d(h2, self.df_dim*8, name='d_h3_conv')))
       h4 = linear(tf.reshape(h1, [self.batch_size, -1]), 1, 'd_h4_lin')
-#        h5 = tf.layers.dense(inputs=\
-#                   tf.pow(tf.subtract(h4, scores), tf.fill(tf.shape(h4), 2.0)),\
-#                   units=1, activation=tf.nn.sigmoid, name='d_h5_sigmoid')
       h5 = tf.pow(tf.subtract(h4, scores), tf.fill(tf.shape(h4), 2.0))
       print("shape of discriminator output(h4): ", tf.shape(h4))
 
@@ -504,194 +489,6 @@ class DCGAN(object):
       b_reconstruct = self.bias_variable([self.n_pixels], 'g_b_reconstruct')
       reconstruction = tf.nn.sigmoid(self.FC_layer(h_dec, W_reconstruct, b_reconstruct))
       return reconstruction
-
-#  def generate(image):
-##    num_pairs = 20
-##    image_indices = np.random.randint(0, 200, num_pairs)
-##    for pair in range(num_pairs):
-#      x = np.reshape(image, (1,self.n_pixels))
-#        plt.figure()
-#        x_image = np.reshape(x, (size))
-##        plt.subplot(121)
-##        plt.imshow(x_image)
-#        x_reconstruction = self.eval(feed_dict={X: x})
-#        x_reconstruction_image = (np.reshape(x_reconstruction, (size)))
-#        plt.imsave("/home/intergalactic/Prashanth/batch_output/{}.png".format(pair),x_reconstruction_image)
-
-
-
-#  def generator(self, z, y=None):
-#    with tf.variable_scope("generator") as scope:
-#      if not self.y_dim:
-#        s_h, s_w = self.output_height, self.output_width
-##        s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
-##        s_h4, s_w4 = conv_out_size_same(s_h2, 2), conv_out_size_same(s_w2, 2)
-##        s_h8, s_w8 = conv_out_size_same(s_h4, 2), conv_out_size_same(s_w4, 2)
-##        s_h16, s_w16 = conv_out_size_same(s_h8, 2), conv_out_size_same(s_w8, 2)
-#        s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
-#
-##        print("s_h16, s_w16: ",s_h16, s_w16)
-#        # project `z` and reshape
-##        self.z_, self.h0_w, self.h0_b = linear(
-##            z, self.gf_dim*8*s_h16*s_w16, 'g_h0_lin', with_w=True)
-##
-##        self.h0 = tf.reshape(
-##            self.z_, [-1, s_h16, s_w16, self.gf_dim * 8])
-##        h0 = tf.nn.relu(self.g_bn0(self.h0))
-#
-##        self.h1, self.h1_w, self.h1_b = deconv2d(
-##            h0, [self.batch_size, s_h8, s_w8, self.gf_dim*4], name='g_h1', with_w=True)
-##        h1 = tf.nn.relu(self.g_bn1(self.h1))
-##
-##        h2, self.h2_w, self.h2_b = deconv2d(
-##            h1, [self.batch_size, s_h4, s_w4, self.gf_dim*2], name='g_h2', with_w=True)
-##        h2 = tf.nn.relu(self.g_bn2(h2))
-##
-##        h3, self.h3_w, self.h3_b = deconv2d(
-##            h2, [self.batch_size, s_h2, s_w2, self.gf_dim*1], name='g_h3', with_w=True)
-##        h3 = tf.nn.relu(self.g_bn3(h3))
-##
-##        h4, self.h4_w, self.h4_b = deconv2d(
-##            h3, [self.batch_size, s_h, s_w, self.c_dim], name='g_h4', with_w=True)
-#
-#        self.z_, self.h0_w, self.h0_b = linear(
-#            z, int(self.gf_dim/8*s_h2*s_w2), 'g_h0_lin', with_w=True)
-#
-#        self.h0 = tf.reshape(
-#            self.z_, [-1, s_h2, s_w2, int(self.gf_dim/8)])
-#        h0 = tf.nn.relu(self.g_bn0(self.h0))
-#
-#
-#        self.h1, self.h1_w, self.h1_b = deconv2d(
-#            h0, [self.batch_size, s_h, s_w, self.gf_dim], name='g_h1', with_w=True)
-#        h1 = tf.nn.relu(self.g_bn1(self.h1))
-#        print("--------------tf.shape(h1):", self.h1.get_shape())
-#        return tf.nn.tanh(h1)
-##        return tf.nn.tanh(h4)
-#      else:
-#        print ("MNIIIISSTTT")
-#        s_h, s_w = self.output_height, self.output_width
-#        s_h2, s_h4 = int(s_h/2), int(s_h/4)
-#        s_w2, s_w4 = int(s_w/2), int(s_w/4)
-#
-#        # yb = tf.expand_dims(tf.expand_dims(y, 1),2)
-#        yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
-#        z = concat([z, y], 1)
-#
-#        h0 = tf.nn.relu(
-#            self.g_bn0(linear(z, self.gfc_dim, 'g_h0_lin')))
-#        h0 = concat([h0, y], 1)
-#
-#        h1 = tf.nn.relu(self.g_bn1(
-#            linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin')))
-#        h1 = tf.reshape(h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
-#
-#        h1 = conv_cond_concat(h1, yb)
-#
-#        h2 = tf.nn.relu(self.g_bn2(deconv2d(h1,
-#            [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2')))
-#        h2 = conv_cond_concat(h2, yb)
-#
-#        return tf.nn.sigmoid(
-#            deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
-
-#  def sampler(self, z, y=None):
-#    with tf.variable_scope("generator") as scope:
-#      scope.reuse_variables()
-#
-#      if not self.y_dim:
-#        s_h, s_w = self.output_height, self.output_width
-##        s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
-##        s_h4, s_w4 = conv_out_size_same(s_h2, 2), conv_out_size_same(s_w2, 2)
-##        s_h8, s_w8 = conv_out_size_same(s_h4, 2), conv_out_size_same(s_w4, 2)
-##        s_h16, s_w16 = conv_out_size_same(s_h8, 2), conv_out_size_same(s_w8, 2)
-#        s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
-#
-#        # project `z` and reshape
-##        h0 = tf.reshape(
-##            linear(z, self.gf_dim*8*s_h16*s_w16, 'g_h0_lin'),
-##            [-1, s_h16, s_w16, self.gf_dim * 8])
-##        h0 = tf.nn.relu(self.g_bn0(h0, train=False))
-##
-##        h1 = deconv2d(h0, [self.batch_size, s_h8, s_w8, self.gf_dim*4], name='g_h1')
-##        h1 = tf.nn.relu(self.g_bn1(h1, train=False))
-##
-##        h2 = deconv2d(h1, [self.batch_size, s_h4, s_w4, self.gf_dim*2], name='g_h2')
-##        h2 = tf.nn.relu(self.g_bn2(h2, train=False))
-##
-##        h3 = deconv2d(h2, [self.batch_size, s_h2, s_w2, self.gf_dim*1], name='g_h3')
-##        h3 = tf.nn.relu(self.g_bn3(h3, train=False))
-##
-##        h4 = deconv2d(h3, [self.batch_size, s_h, s_w, self.c_dim], name='g_h4')
-#
-#        h0 = tf.reshape(
-#            linear(z, int(self.gf_dim/8.0*s_h2*s_w2), 'g_h0_lin'),
-#            [-1, s_h2, s_w2, int(self.gf_dim /8)])
-#        h0 = tf.nn.relu(self.g_bn0(h0, train=False))
-#
-#        h1 = deconv2d(h0, [self.batch_size, s_h, s_w, self.gf_dim], name='g_h1')
-#        h1 = tf.nn.relu(self.g_bn1(h1, train=False))
-#
-#        return tf.nn.tanh(h1)
-#      else:
-#        s_h, s_w = self.output_height, self.output_width
-#        s_h2, s_h4 = int(s_h/2), int(s_h/4)
-#        s_w2, s_w4 = int(s_w/2), int(s_w/4)
-#
-#        # yb = tf.reshape(y, [-1, 1, 1, self.y_dim])
-#        yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
-#        z = concat([z, y], 1)
-#
-#        h0 = tf.nn.relu(self.g_bn0(linear(z, self.gfc_dim, 'g_h0_lin'), train=False))
-#        h0 = concat([h0, y], 1)
-#
-#        h1 = tf.nn.relu(self.g_bn1(
-#            linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin'), train=False))
-#        h1 = tf.reshape(h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
-#        h1 = conv_cond_concat(h1, yb)
-#
-#        h2 = tf.nn.relu(self.g_bn2(
-#            deconv2d(h1, [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2'), train=False))
-#        h2 = conv_cond_concat(h2, yb)
-#
-#        return tf.nn.sigmoid(deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
-
-#  def load_mnist(self):
-#    data_dir = os.path.join(self.data_path, self.dataset_name)
-#    
-#    fd = open(os.path.join(data_dir,'train-images-idx3-ubyte'))
-#    loaded = np.fromfile(file=fd,dtype=np.uint8)
-#    trX = loaded[16:].reshape((60000,28,28,1)).astype(np.float)
-#
-#    fd = open(os.path.join(data_dir,'train-labels-idx1-ubyte'))
-#    loaded = np.fromfile(file=fd,dtype=np.uint8)
-#    trY = loaded[8:].reshape((60000)).astype(np.float)
-#
-#    fd = open(os.path.join(data_dir,'t10k-images-idx3-ubyte'))
-#    loaded = np.fromfile(file=fd,dtype=np.uint8)
-#    teX = loaded[16:].reshape((10000,28,28,1)).astype(np.float)
-#
-#    fd = open(os.path.join(data_dir,'t10k-labels-idx1-ubyte'))
-#    loaded = np.fromfile(file=fd,dtype=np.uint8)
-#    teY = loaded[8:].reshape((10000)).astype(np.float)
-#
-#    trY = np.asarray(trY)
-#    teY = np.asarray(teY)
-#    
-#    X = np.concatenate((trX, teX), axis=0)
-#    y = np.concatenate((trY, teY), axis=0).astype(np.int)
-#    
-#    seed = 547
-#    np.random.seed(seed)
-#    np.random.shuffle(X)
-#    np.random.seed(seed)
-#    np.random.shuffle(y)
-#    
-#    y_vec = np.zeros((len(y), self.y_dim), dtype=np.float)
-#    for i, label in enumerate(y):
-#      y_vec[i,y[i]] = 1.0
-#    
-#    return X/255.,y_vec
 
 
   @property
