@@ -1,0 +1,5 @@
+To train DCGAN, run this when in DCGAN-tensorflow directory:
+python3 main.py --input_height=128 --output_height=128 --input_width=128 --output_width=128 --crop --training_subset=65 --data_dir=../../cosmology_aux_data_170429 --epoch=500 --batch_size=64 --train
+
+To predict similarity scores for query images, run this when in DCGAN-tensorflow directory:
+python3 main.py --input_height=128 --output_height=128 --input_width=128 --output_width=128 --crop --training_subset=65 --data_dir=../../cosmology_aux_data_170429 --epoch=500 --batch_size=64 
