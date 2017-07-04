@@ -1,0 +1,49 @@
+Ran this model:
+14 epochs
+4 hours
+4 CPUs
+
+Job <python main.py --dataset mnist --input_height=28 --output_height=28 --train> was submitted from host <euler08> by user <jsara> in cluster <euler>.
+python main.py --dataset mnist --input_height=28 --output_height=28 --train
+
+Resource usage summary:
+
+    CPU time :                                   82925.70 sec.
+    Max Memory :                                 1166 MB
+    Average Memory :                             1128.71 MB
+    Total Requested Memory :                     4096.00 MB
+    Delta Memory :                               2930.00 MB
+    Max Swap :                                   -
+    Max Processes :                              3
+    Max Threads :                                21
+    Run time :                                   14401 sec.
+    Turnaround time :                            14662 sec.
+
+
+
+[Sample] d_loss: 1.36097240, g_loss: 0.70650959
+Epoch: [14] [ 997/1093] time: 13692.7947, d_loss: 1.38460219, g_loss: 0.65905786
+Epoch: [14] [ 998/1093] time: 13693.6291, d_loss: 1.37818789, g_loss: 0.65340400
+Epoch: [14] [ 999/1093] time: 13694.4670, d_loss: 1.41399455, g_loss: 0.64274532
+Epoch: [14] [1000/1093] time: 13695.3026, d_loss: 1.37993407, g_loss: 0.65363157
+Epoch: [14] [1001/1093] time: 13696.1370, d_loss: 1.37232661, g_loss: 0.66447634
+Epoch: [14] [1002/1093] time: 13696.9747, d_loss: 1.37871623, g_loss: 0.66460556
+Epoch: [14] [1003/1093] time: 13697.8051, d_loss: 1.38905323, g_loss: 0.66555864
+Epoch: [14] [1004/1093] time: 13698.6362, d_loss: 1.41654813, g_loss: 0.64121765
+Epoch: [14] [1005/1093] time: 13699.4721, d_loss: 1.38449574, g_loss: 0.67609501
+Epoch: [14] [1006/1093] time: 13700.3064, d_loss: 1.36619759, g_loss: 0.66583192
+Epoch: [14] [1007/1093] time: 13701.1368, d_loss: 1.36189127, g_loss: 0.67946225
+Epoch: [14] [1008/1093] time: 13701.9635, d_loss: 1.39584780, g_loss: 0.65348154
+Epoch: [14] [1009/1093] time: 13702.7962, d_loss: 1.35519707, g_loss: 0.65826076
+Epoch: [14] [1010/1093] time: 13703.6317, d_loss: 1.36231029, g_loss: 0.66983938
+Epoch: [14] [1011/1093] time: 13704.4662, d_loss: 1.40286803, g_loss: 0.64925772
+Epoch: [14] [1012/1093] time: 13705.2950, d_loss: 1.37535071, g_loss: 0.65662318
+Epoch: [14] [1013/1093] time: 13706.1327, d_loss: 1.37707305, g_loss: 0.67467362
+Epoch: [14] [1014/1093] time: 13706.9635, d_loss: 1.38784027, g_loss: 0.66982973
+Epoch: [14] [1015/1093] time: 13707.7990, d_loss: 1.38201284, g_loss: 0.65994769
+Epoch: [14] [1016/1093] time: 13708.6348, d_loss: 1.38393497, g_loss: 0.66359997
+Epoch: [14] [1017/1093] time: 13709.4659, d_loss: 1.37667346, g_loss: 0.65146899
+Epoch: [14] [1018/1093] time: 13710.2928, d_loss: 1.37545276, g_loss: 0.67061305
+Epoch: [14] [1019/1093] time: 13711.1255, d_loss: 1.38822341, g_loss: 0.66277218
+...
+Epoch: [14] [1069/1093] time: 13752.7590, d_loss: 1.35064268, g_loss: 0.68070334User defined signal 2
