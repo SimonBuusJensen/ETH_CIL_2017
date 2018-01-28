@@ -94,14 +94,14 @@ class DCGAN(object):
     self.all_scores = self.all_scores[:training_subset]
     self.data = self.data[:training_subset]
     self.labeled_data = []
-    print("len of labeled_data ", len(self.labeled_data))
+#    print("len of labeled_data ", len(self.labeled_data))
     for d in raw_labeled_data:
       name = re.sub(".png", "", re.findall(r"\d*\.png", d)[0])
       if int(name) in list(labeled_df["Id"]):
         self.labeled_data.append(d)
     
-    print("labeled_data ", self.labeled_data[1], self.labeled_data[1][40:47])
-    print("len of labeled_data ", len(self.labeled_data))
+#    print("labeled_data ", self.labeled_data[1], self.labeled_data[1][40:47])
+#    print("len of labeled_data ", len(self.labeled_data))
 #      print(len(self.all_scores))
 #      print(os.path.join(self.data_path, self.dataset_name, self.input_fname_pattern), self.data[:10])
     imreadImg = imread(self.data[0])
@@ -249,7 +249,7 @@ class DCGAN(object):
 
 
   def predict_query(self, config):
-      " function predict_query: predict similarity scores for query images"    
+      " function predict_query: predict similarity scores for query images"
       self.data = glob(os.path.join(self.data_path, "query", self.input_fname_pattern))
       self.D, self.D_logits, self.D_similarity = \
               self.discriminator(self.inputs, self.scores, reuse=True)

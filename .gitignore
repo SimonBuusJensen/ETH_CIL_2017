@@ -9,3 +9,5 @@ ConvNet/checkpoints
 ConvNet/log
 ConvNet/output
 ConvNet/data/matrices
+.idea
+*.pyc
